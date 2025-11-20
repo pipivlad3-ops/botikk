@@ -1,10 +1,18 @@
 const TelegramBot = require('node-telegram-bot-api');
+const express = require("express");
+const bodyParser = require("body-parser");
 
-// =============================
-// 🔧 CONFIG
-// =============================
-const token = '8534162570:AAFdNjOaNBaLmXAWVdgCNqMjv58w1tuf5o4';
-const bot = new TelegramBot(token, { polling: true });
+// -----------------------------
+// Config: token from env
+// -----------------------------
+const token = process.env.BOT_TOKEN;
+if (!token) {
+  console.error("ERROR: BOT_TOKEN is not set in environment variables.");
+  process.exit(1);
+}
+
+// Create bot WITHOUT polling (we will use webhook)
+const bot = new TelegramBot(token, { polling: false });
 
 // =============================
 // 🕒 AUTO-DELETE (20 seconds)
@@ -15,22 +23,32 @@ function autoDelete(chatId, messageId) {
   }, 20000);
 }
 
-const express = require("express");
+// =============================
+// Express server for webhook
+// =============================
 const app = express();
-const PORT = process.env.PORT || 3000;
+app.use(bodyParser.json());
 
-app.get("/", (req, res) => {
-  res.send("Bot is running");
+// Endpoint Telegram will POST updates to
+app.post('/webhook', (req, res) => {
+  try {
+    bot.processUpdate(req.body);
+    res.sendStatus(200);
+  } catch (err) {
+    console.error("Error processing update", err);
+    res.sendStatus(500);
+  }
 });
 
-app.listen(PORT, () => {
-  console.log("Server running on port " + PORT);
+// Healthcheck
+app.get("/", (req, res) => {
+  res.send("Bot is running via webhook");
 });
 
 // =============================
 // 🎭 STATE STORAGE
-// =============================
 // userState[chatId] = { waitingFor: null | "YES_NO" | "PREDICTION" | "ADVICE" | "NUMBER" }
+// =============================
 const userState = {};
 
 // =============================
@@ -57,7 +75,7 @@ const predictions = [
   "Ты идёшь по пути, который создаётся под твоими шагами.",
   "То, что сейчас болезненно — станет твоей силой.",
   "Скоро ты встретишь тишину, которая скажет больше тысячи голосов.",
-  "Пока ждёшь идеальный момент — другие уже живут твоей мечтой.",
+  "Пока ждёшь идеальный момент — другие уже живут своей мечтой.",
   "Ты знаешь, что делать — просто надеешься, что судьба решит за тебя."
 ];
 
@@ -295,3 +313,10 @@ bot.on("message", msg => {
   ).then(m => autoDelete(chatId, m.message_id));
 });
 
+// =============================
+// Start express
+// =============================
+const PORT = process.env.PORT || 3000;
+app.listen(PORT, () => {
+  console.log("Server running on port " + PORT);
+});
